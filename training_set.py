@@ -3,7 +3,7 @@ import cv2
 import matplotlib.pyplot as plt
 
 # Base directory path
-base_dir = r"D:\Users\hp\Downloads\archive\C-NMC_Leukemia\training_data"
+base_dir = r"D:\Users\HP\Downloads\archive\C-NMC_Leukemia\training_data"
 
 # Function to load images from folders and subfolders
 def load_images_with_subfolders(base_dir):
@@ -43,3 +43,4 @@ if images:
     plt.show()
 else:
     print("No images found. Check the directory paths.")
+
