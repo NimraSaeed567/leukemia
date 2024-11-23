@@ -1,59 +1,118 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.utils import to_categorical
-from sklearn.preprocessing import StandardScaler
 
-# Load the dataset
-data_path = "D:/Users/leukemia/leukemia_image_signals_dataset.csv"
-df = pd.read_csv(data_path)
+# Load datasets
+train_csv = "leukemia_image_signals_dataset.csv"  # Path to your training dataset
+val_csv = "merged_image_data_with_labels.csv"  # Path to your validation dataset
+test_csv = "testing_image_features.csv"    # Path to your testing dataset
 
-# Check the first few rows of the dataset
-print(df.head())
+# Step 1: Load CSV data
+train_data = pd.read_csv(train_csv)
+val_data = pd.read_csv(val_csv)
+test_data = pd.read_csv(test_csv)
 
-# Split the dataset into features (X) and target labels (y)
-X = df.drop('Label', axis=1)  # Drop the label column
-y = df['Label']  # The target variable (Label)
+# Separate features and labels
+X_train = train_data.iloc[:, :-1].values  # All columns except the last
+y_train = train_data.iloc[:, -1].values   # Last column as labels
 
-# Ensure that the labels are categorical
-# Convert labels to numerical format if needed (assuming the labels are categorical strings)
-y = pd.factorize(y)[0]
+X_val = val_data.iloc[:, :-1].values
+y_val = val_data.iloc[:, -1].values
 
-# Convert labels to one-hot encoding for multiclass classification
-y = to_categorical(y, num_classes=4)  # Set the number of classes to 4 (as an example)
+X_test = test_data.iloc[:, :-1].values
+y_test = test_data.iloc[:, -1].values
 
-# Standardize the feature data (important for neural networks)
-scaler = StandardScaler()
-X = scaler.fit_transform(X)
+# Step 2: Preprocess data
+# Normalize features to the range [0, 1]
+scaler = MinMaxScaler()
+X_train = scaler.fit_transform(X_train)
+X_val = scaler.transform(X_val)
+X_test = scaler.transform(X_test)
 
-# Split the data into training, validation, and test sets
-X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.4, random_state=42)
-X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+# Encode labels (convert to integers if necessary)
+label_encoder = LabelEncoder()
+y_train = label_encoder.fit_transform(y_train)
+y_val = label_encoder.transform(y_val)
+y_test = label_encoder.transform(y_test)
 
-# Build the neural network model
-model = Sequential()
+# Convert to one-hot encoding
+y_train = to_categorical(y_train)
+y_val = to_categorical(y_val)
+y_test = to_categorical(y_test)
 
-# Add an input layer with the number of features
-model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
-
-# Add a hidden layer
-model.add(Dense(32, activation='relu'))
-
-# Add an output layer with 4 units (one for each class) and softmax activation
-model.add(Dense(4, activation='softmax'))  # 4 classes
+# Step 3: Define the neural network
+model = Sequential([
+    Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
+    Dropout(0.3),
+    Dense(64, activation='relu'),
+    Dropout(0.3),
+    Dense(y_train.shape[1], activation='softmax')  # Output layer with 'softmax' for multi-class classification
+])
 
 # Compile the model
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam',
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
 
-# Train the model
-history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=20, batch_size=32)
+# Step 4: Train the model
+history = model.fit(X_train, y_train,
+                    validation_data=(X_val, y_val),
+                    epochs=30,
+                    batch_size=32)
 
-# Evaluate the model on the test set
-test_loss, test_accuracy = model.evaluate(X_test, y_test)
-print(f"Test Loss: {test_loss}")
-print(f"Test Accuracy: {test_accuracy}")
+# Step 5: Evaluate on the testing dataset
+test_loss, test_accuracy = model.evaluate(X_test, y_test, verbose=0)
+print(f"Test Accuracy: {test_accuracy:.2f}")
 
-# Optionally, save the model
-# model.save('leukemia_classification_model.h5')
+# Save the model for future use
+model.save("leukemia_classification_model.h5")
+
+# Step 6: Visualize training history (optional)
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(12, 4))
+
+# Plot accuracy
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.title('Training and Validation Accuracy')
+
+# Plot loss
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.title('Training and Validation Loss')
+
+plt.show()
+
+# Step 7: Make predictions
+y_pred = model.predict(X_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+y_true_classes = np.argmax(y_test, axis=1)
+
+# Confusion matrix
+from sklearn.metrics import confusion_matrix, classification_report
+import seaborn as sns
+
+conf_matrix = confusion_matrix(y_true_classes, y_pred_classes)
+print("\nClassification Report:")
+print(classification_report(y_true_classes, y_pred_classes, target_names=label_encoder.classes_))
+
+# Visualize confusion matrix
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix')
+plt.show()
